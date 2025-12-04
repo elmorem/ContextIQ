@@ -205,3 +205,25 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ContextIQ specific
+postgres_data/
+redis_data/
+qdrant_data/
+rabbitmq_data/
+logs/
+tmp/
+temp/
+*.bak
+*.backup
+
+# Docker
+docker-compose.override.yml
+
+# VS Code project-specific
+.vscode/settings.json
+.vscode/launch.json
+
+# OS
+.DS_Store
+Thumbs.db

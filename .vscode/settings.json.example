@@ -1,0 +1,109 @@
+{
+  // Python Configuration
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+
+  // Formatting
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+
+  // Black formatter settings
+  "black-formatter.args": [
+    "--line-length=100"
+  ],
+
+  // Ruff linter settings
+  "ruff.lint.args": [
+    "--line-length=100"
+  ],
+  "ruff.enable": true,
+  "ruff.organizeImports": true,
+
+  // Python linting
+  "python.linting.enabled": true,
+  "python.linting.ruffEnabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Enabled": false,
+
+  // Type checking
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticMode": "workspace",
+
+  // Testing
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "tests",
+    "services"
+  ],
+
+  // File exclusions
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/htmlcov": true
+  },
+
+  "files.watcherExclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/htmlcov": true,
+    "**/postgres_data": true,
+    "**/redis_data": true,
+    "**/qdrant_data": true,
+    "**/rabbitmq_data": true
+  },
+
+  // Editor settings
+  "editor.rulers": [100],
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+
+  // Docker
+  "docker.containers.sortBy": "Name",
+  "docker.images.sortBy": "CreatedTime",
+
+  // Git
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+
+  // Terminal
+  "terminal.integrated.env.osx": {
+    "PYTHONPATH": "${workspaceFolder}"
+  },
+  "terminal.integrated.env.linux": {
+    "PYTHONPATH": "${workspaceFolder}"
+  },
+
+  // Spell checker
+  "cSpell.words": [
+    "contextiq",
+    "qdrant",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "alembic",
+    "asyncpg",
+    "psycopg",
+    "sqlalchemy",
+    "litellm",
+    "tiktoken"
+  ]
+}
