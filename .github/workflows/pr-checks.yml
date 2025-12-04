@@ -161,7 +161,7 @@ jobs:
           done
 
       - name: Validate docker-compose.yml
-        run: docker-compose config > /dev/null || true
+        run: docker compose config > /dev/null || true
 
       - name: Validate pyproject.toml
         run: |
