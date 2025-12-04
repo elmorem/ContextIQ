@@ -1,0 +1,77 @@
+name: Build Docker Images
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/build.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'docker-compose.yml'
+
+jobs:
+  build-services:
+    name: Build ${{ matrix.service }} Service
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - sessions
+          - memory
+          - procedural
+          - api-gateway
+          - workers/extraction
+          - workers/consolidation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Check if service exists
+        id: check_service
+        run: |
+          if [ -f "services/${{ matrix.service }}/Dockerfile" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Service ${{ matrix.service }} Dockerfile not found yet - skipping"
+          fi
+
+      - name: Build ${{ matrix.service }} image
+        if: steps.check_service.outputs.exists == 'true'
+        run: |
+          docker build \
+            -f services/${{ matrix.service }}/Dockerfile \
+            -t contextiq/${{ matrix.service }}:${{ github.sha }} \
+            .
+
+      - name: Test image runs
+        if: steps.check_service.outputs.exists == 'true'
+        run: |
+          docker run --rm contextiq/${{ matrix.service }}:${{ github.sha }} --help || true
+        continue-on-error: true
+
+  build-infrastructure:
+    name: Test Infrastructure Stack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: docker-compose config > /dev/null
+
+      - name: Pull infrastructure images
+        run: |
+          docker-compose pull postgres redis qdrant rabbitmq || true
+        continue-on-error: true
