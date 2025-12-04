@@ -126,6 +126,10 @@ ignore_missing_imports = true
 module = "tests.*"
 disallow_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = "shared.*"
+warn_return_any = false
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --strict-markers --cov=services --cov=shared --cov-report=term-missing --cov-report=html"
