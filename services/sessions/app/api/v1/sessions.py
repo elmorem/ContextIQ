@@ -8,7 +8,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.sessions.app.api.schemas.requests import (
     CreateEventRequest,
@@ -23,7 +22,6 @@ from services.sessions.app.api.schemas.responses import (
     SessionResponse,
 )
 from services.sessions.app.core.dependencies import (
-    get_db_session,
     get_event_repository,
     get_session_repository,
     get_session_service,
