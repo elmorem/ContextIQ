@@ -4,7 +4,6 @@ Configuration for sessions service.
 Manages service settings using Pydantic Settings.
 """
 
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -25,6 +24,7 @@ class SessionsServiceSettings(BaseSettings):
     service_version: str = Field("0.1.0", description="Service version")
     environment: str = Field("development", description="Environment")
     debug: bool = Field(False, description="Debug mode")
+    log_level: str = Field("INFO", description="Logging level")
 
     # Database configuration
     database_url: str = Field(
