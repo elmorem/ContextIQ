@@ -9,7 +9,12 @@ from typing import Annotated, Any
 
 from fastapi import Depends
 from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from services.sessions.app.core.config import SessionsServiceSettings, get_settings
 from services.sessions.app.db.repositories.event_repository import EventRepository
