@@ -10,9 +10,14 @@ from shared.vector_store.collections import (
     get_collection_configs,
     get_memory_collection_config,
 )
+from shared.vector_store.config import QdrantSettings, get_qdrant_settings
+from shared.vector_store.qdrant_client import QdrantClientWrapper
 
 __all__ = [
     "CollectionConfig",
     "get_collection_configs",
     "get_memory_collection_config",
+    "QdrantSettings",
+    "get_qdrant_settings",
+    "QdrantClientWrapper",
 ]
