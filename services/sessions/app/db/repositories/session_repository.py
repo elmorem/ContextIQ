@@ -218,6 +218,62 @@ class SessionRepository(BaseRepository[Session]):
 
         return result.rowcount if result.rowcount else 0
 
+    async def list_sessions(
+        self,
+        scope: dict | None = None,
+        active_only: bool = True,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Session]:
+        """
+        List sessions with optional filtering.
+
+        Args:
+            scope: Optional scope to filter by
+            active_only: If True, only return active (non-ended) sessions
+            limit: Maximum number of sessions to return
+            offset: Number of sessions to skip
+
+        Returns:
+            List of sessions ordered by last_activity_at descending
+        """
+        stmt = select(Session).order_by(Session.last_activity_at.desc()).limit(limit).offset(offset)
+
+        if scope:
+            stmt = stmt.where(Session.scope == scope)
+
+        if active_only:
+            stmt = stmt.where(Session.ended_at.is_(None))
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_sessions(
+        self,
+        scope: dict | None = None,
+        active_only: bool = True,
+    ) -> int:
+        """
+        Count sessions with optional filtering.
+
+        Args:
+            scope: Optional scope to filter by
+            active_only: If True, only count active (non-ended) sessions
+
+        Returns:
+            Number of sessions
+        """
+        stmt = select(func.count()).select_from(Session)
+
+        if scope:
+            stmt = stmt.where(Session.scope == scope)
+
+        if active_only:
+            stmt = stmt.where(Session.ended_at.is_(None))
+
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
     async def count_by_scope(self, scope: dict) -> int:
         """
         Count sessions for a given scope.

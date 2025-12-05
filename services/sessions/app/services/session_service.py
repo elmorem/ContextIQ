@@ -282,6 +282,30 @@ class SessionService:
 
         return ended
 
+    async def delete_session(self, session_id: UUID) -> None:
+        """
+        Delete a session and all its events.
+
+        Args:
+            session_id: Session ID
+
+        Raises:
+            SessionNotFoundError: If session not found
+        """
+        # Check if session exists
+        session = await self.session_repo.get_by_id(session_id)
+        if session is None:
+            raise SessionNotFoundError(session_id)
+
+        # Delete all events for this session
+        await self.event_repo.delete_session_events(session_id)
+
+        # Delete the session
+        await self.session_repo.delete(session)
+
+        # Invalidate cache
+        await self._invalidate_cache(session_id)
+
     async def add_event(
         self,
         session_id: UUID,

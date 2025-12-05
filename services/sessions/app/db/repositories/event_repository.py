@@ -175,6 +175,62 @@ class EventRepository(BaseRepository[Event]):
             "total_output_tokens": row.total_output or 0,
         }
 
+    async def list_events(
+        self,
+        session_id: UUID,
+        event_type: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Event]:
+        """
+        List events for a session with optional filtering.
+
+        Args:
+            session_id: Session ID
+            event_type: Optional event type filter
+            limit: Maximum number of events to return
+            offset: Number of events to skip
+
+        Returns:
+            List of events ordered by timestamp
+        """
+        stmt = (
+            select(Event)
+            .where(Event.session_id == session_id)
+            .order_by(Event.timestamp.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+        if event_type:
+            stmt = stmt.where(Event.event_type == event_type)
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_events(
+        self,
+        session_id: UUID,
+        event_type: str | None = None,
+    ) -> int:
+        """
+        Count events for a session with optional filtering.
+
+        Args:
+            session_id: Session ID
+            event_type: Optional event type filter
+
+        Returns:
+            Number of events
+        """
+        stmt = select(func.count()).select_from(Event).where(Event.session_id == session_id)
+
+        if event_type:
+            stmt = stmt.where(Event.event_type == event_type)
+
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
     async def delete_session_events(self, session_id: UUID) -> int:
         """
         Delete all events for a session.
