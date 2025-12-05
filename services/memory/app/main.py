@@ -1,0 +1,80 @@
+"""
+Main FastAPI application for memory service.
+
+Provides REST API for episodic memory storage with embeddings and revision tracking.
+"""
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from services.memory.app.api.health import router as health_router
+from services.memory.app.core.config import get_settings
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+    Manage application lifespan.
+
+    Handles startup and shutdown events.
+    """
+    # Startup
+    settings = get_settings()
+    app.state.settings = settings
+
+    yield
+
+    # Shutdown - connections will be closed by FastAPI
+
+
+def create_app() -> FastAPI:
+    """
+    Create and configure FastAPI application.
+
+    Returns:
+        Configured FastAPI application instance
+    """
+    settings = get_settings()
+
+    app = FastAPI(
+        title="Memory Service",
+        description="Episodic memory storage with vector embeddings and revision tracking",
+        version="0.1.0",
+        docs_url="/docs" if settings.debug else None,
+        redoc_url="/redoc" if settings.debug else None,
+        lifespan=lifespan,
+    )
+
+    # CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Configure appropriately for production
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Register routers
+    app.include_router(health_router, tags=["health"])
+
+    return app
+
+
+# Create application instance
+app = create_app()
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    settings = get_settings()
+    uvicorn.run(
+        "services.memory.app.main:app",
+        host="0.0.0.0",
+        port=8002,
+        reload=settings.debug,
+        log_level=settings.log_level.lower(),
+    )
