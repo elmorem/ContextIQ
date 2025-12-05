@@ -1,16 +1,16 @@
 """
 SQLAlchemy models for memory service.
 
-Defines the Memory model for episodic memory storage with vector embeddings.
+Defines models for episodic memory storage with vector embeddings and revision tracking.
 """
 
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import ARRAY, DateTime, Float, Integer, String, Text
+from sqlalchemy import ARRAY, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shared.database.base import Base
 
@@ -109,6 +109,73 @@ class Memory(Base):
         onupdate=lambda: datetime.now(UTC),
     )
 
+    # Relationships
+    revisions: Mapped[list["MemoryRevision"]] = relationship(
+        "MemoryRevision",
+        back_populates="memory",
+        cascade="all, delete-orphan",
+        order_by="MemoryRevision.revision_number.desc()",
+    )
+
     def __repr__(self) -> str:
         """String representation of Memory."""
         return f"<Memory(id={self.id}, topic={self.topic}, fact={self.fact[:50]}...)>"
+
+
+class MemoryRevision(Base):
+    """Model for tracking memory revision history."""
+
+    __tablename__ = "memory_revisions"
+
+    id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    memory_id: Mapped[UUID] = mapped_column(
+        PostgresUUID(as_uuid=True),
+        ForeignKey("memories.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Reference to parent memory",
+    )
+    revision_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="Sequential revision number for this memory",
+    )
+    previous_fact: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="The fact before this revision",
+    )
+    new_fact: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="The fact after this revision",
+    )
+    change_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Optional reason for the change",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="now()",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default="now()",
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    # Relationships
+    memory: Mapped["Memory"] = relationship("Memory", back_populates="revisions")
+
+    def __repr__(self) -> str:
+        """String representation of MemoryRevision."""
+        return f"<MemoryRevision(id={self.id}, memory_id={self.memory_id}, revision={self.revision_number})>"
