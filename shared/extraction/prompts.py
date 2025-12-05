@@ -5,6 +5,8 @@ Provides system prompts and few-shot examples for extracting
 structured memories from conversation events.
 """
 
+from typing import Any
+
 # System prompt for memory extraction
 EXTRACTION_SYSTEM_PROMPT = """You are a memory extraction assistant for an AI context management system called ContextIQ.
 
@@ -63,8 +65,6 @@ Extract ONLY memories with confidence >= 0.5 unless the user explicitly requests
 """
 
 # Few-shot examples for extraction
-from typing import Any
-
 FEW_SHOT_EXAMPLES: list[dict[str, Any]] = [
     {
         "conversation": """User: I'm Mark, and I love pizza. I'm a software engineer at Google.
