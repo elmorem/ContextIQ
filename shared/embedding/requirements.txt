@@ -1,0 +1,6 @@
+# OpenAI API client for embeddings
+openai==1.59.5
+
+# Pydantic for settings management
+pydantic==2.10.3
+pydantic-settings==2.6.1
