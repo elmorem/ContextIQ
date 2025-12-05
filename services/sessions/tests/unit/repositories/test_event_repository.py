@@ -4,7 +4,6 @@ Unit tests for EventRepository.
 These tests use an in-memory SQLite database for testing.
 """
 
-
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
