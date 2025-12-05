@@ -35,11 +35,10 @@ def mock_qdrant_client():
 @pytest.fixture
 def qdrant_wrapper(mock_settings, mock_qdrant_client):
     """Create QdrantClientWrapper with mocked client."""
-    with patch("shared.vector_store.qdrant_client.QdrantClient", return_value=mock_qdrant_client):
-        wrapper = QdrantClientWrapper(settings=mock_settings)
-        # Force client creation
-        _ = wrapper.client
-        return wrapper
+    wrapper = QdrantClientWrapper(settings=mock_settings)
+    # Set the mock client directly instead of going through property
+    wrapper._client = mock_qdrant_client
+    return wrapper
 
 
 class TestInitialization:
@@ -110,6 +109,8 @@ class TestConnectionManagement:
 
             with QdrantClientWrapper(settings=mock_settings) as wrapper:
                 assert wrapper is not None
+                # Access client property to trigger initialization
+                _ = wrapper.client
 
             mock_client.close.assert_called_once()
 
@@ -119,27 +120,47 @@ class TestCollectionOperations:
 
     def test_collection_exists_true(self, qdrant_wrapper, mock_qdrant_client):
         """Test checking if collection exists (exists)."""
+        # Reset mock to clear any previous calls
+        mock_qdrant_client.reset_mock()
+
+        # Create a mock collection with name attribute
+        mock_collection = Mock()
+        mock_collection.name = "test_collection"
+
         mock_collections = Mock()
-        mock_collections.collections = [Mock(name="test_collection")]
+        mock_collections.collections = [mock_collection]
         mock_qdrant_client.get_collections.return_value = mock_collections
 
         assert qdrant_wrapper.collection_exists("test_collection") is True
 
     def test_collection_exists_false(self, qdrant_wrapper, mock_qdrant_client):
         """Test checking if collection exists (doesn't exist)."""
+        # Reset mock to clear any previous calls
+        mock_qdrant_client.reset_mock()
+
+        # Create a mock collection with different name
+        mock_collection = Mock()
+        mock_collection.name = "other_collection"
+
         mock_collections = Mock()
-        mock_collections.collections = [Mock(name="other_collection")]
+        mock_collections.collections = [mock_collection]
         mock_qdrant_client.get_collections.return_value = mock_collections
 
         assert qdrant_wrapper.collection_exists("test_collection") is False
 
     def test_collection_exists_error(self, qdrant_wrapper, mock_qdrant_client):
         """Test collection exists check when error occurs."""
+        # Reset mock to clear any previous calls
+        mock_qdrant_client.reset_mock()
+
         mock_qdrant_client.get_collections.side_effect = Exception("Error")
         assert qdrant_wrapper.collection_exists("test_collection") is False
 
     def test_create_collection_success(self, qdrant_wrapper, mock_qdrant_client):
         """Test creating a new collection."""
+        # Reset mock to clear any previous calls
+        mock_qdrant_client.reset_mock()
+
         config = CollectionConfig(
             name="test_collection",
             vector_size=128,
@@ -158,6 +179,9 @@ class TestCollectionOperations:
 
     def test_create_collection_already_exists(self, qdrant_wrapper, mock_qdrant_client):
         """Test creating a collection that already exists."""
+        # Reset mock to clear any previous calls
+        mock_qdrant_client.reset_mock()
+
         config = CollectionConfig(
             name="existing_collection",
             vector_size=128,
@@ -165,8 +189,11 @@ class TestCollectionOperations:
         )
 
         # Mock collection exists
+        mock_collection = Mock()
+        mock_collection.name = "existing_collection"
+
         mock_collections = Mock()
-        mock_collections.collections = [Mock(name="existing_collection")]
+        mock_collections.collections = [mock_collection]
         mock_qdrant_client.get_collections.return_value = mock_collections
 
         result = qdrant_wrapper.create_collection(config)
@@ -176,9 +203,15 @@ class TestCollectionOperations:
 
     def test_delete_collection_success(self, qdrant_wrapper, mock_qdrant_client):
         """Test deleting an existing collection."""
+        # Reset mock to clear any previous calls
+        mock_qdrant_client.reset_mock()
+
         # Mock collection exists
+        mock_collection = Mock()
+        mock_collection.name = "test_collection"
+
         mock_collections = Mock()
-        mock_collections.collections = [Mock(name="test_collection")]
+        mock_collections.collections = [mock_collection]
         mock_qdrant_client.get_collections.return_value = mock_collections
 
         result = qdrant_wrapper.delete_collection("test_collection")
@@ -190,6 +223,9 @@ class TestCollectionOperations:
 
     def test_delete_collection_not_exists(self, qdrant_wrapper, mock_qdrant_client):
         """Test deleting a collection that doesn't exist."""
+        # Reset mock to clear any previous calls
+        mock_qdrant_client.reset_mock()
+
         # Mock collection doesn't exist
         mock_collections = Mock()
         mock_collections.collections = []
