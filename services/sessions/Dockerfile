@@ -10,14 +10,15 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Copy requirements from service directory
+COPY services/sessions/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy shared modules and service code
+COPY shared/ /app/shared/
+COPY services/sessions/ /app/services/sessions/
 
 # Set Python path to include shared modules
 ENV PYTHONPATH=/app:$PYTHONPATH
