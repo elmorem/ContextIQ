@@ -1,0 +1,6 @@
+# Qdrant vector database client
+qdrant-client==1.12.1
+
+# Pydantic for settings management (already in other services but listed here for clarity)
+pydantic==2.10.3
+pydantic-settings==2.6.1
