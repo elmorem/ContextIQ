@@ -5,7 +5,7 @@ Provides FastAPI dependencies for database sessions and repositories.
 """
 
 from collections.abc import AsyncGenerator
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends
 from redis.asyncio import Redis
@@ -19,6 +19,9 @@ from sqlalchemy.ext.asyncio import (
 from services.sessions.app.core.config import SessionsServiceSettings, get_settings
 from services.sessions.app.db.repositories.event_repository import EventRepository
 from services.sessions.app.db.repositories.session_repository import SessionRepository
+
+if TYPE_CHECKING:
+    from services.sessions.app.services.session_service import SessionService
 
 # Global engine (initialized once)
 _engine = None
@@ -147,6 +150,32 @@ def get_event_repository(
         Event repository instance
     """
     return EventRepository(db)
+
+
+def get_session_service(
+    session_repo: Annotated[SessionRepository, Depends(get_session_repository)],
+    event_repo: Annotated[EventRepository, Depends(get_event_repository)],
+    settings: Annotated[SessionsServiceSettings, Depends(get_settings)],
+) -> "SessionService":
+    """
+    Get session service dependency.
+
+    Args:
+        session_repo: Session repository
+        event_repo: Event repository
+        settings: Service settings
+
+    Returns:
+        Session service instance
+    """
+    from services.sessions.app.services.session_service import SessionService
+
+    return SessionService(
+        session_repo=session_repo,
+        event_repo=event_repo,
+        settings=settings,
+        redis_client=None,  # Redis is optional
+    )
 
 
 async def close_connections() -> None:
