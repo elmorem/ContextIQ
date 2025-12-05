@@ -77,3 +77,45 @@ class DeleteResponse(BaseModel):
             "example": {"success": True, "message": "Memory deleted successfully"}
         }
     }
+
+
+class RevisionResponse(BaseModel):
+    """Response model for memory revision data."""
+
+    id: UUID = Field(..., description="Revision ID")
+    memory_id: UUID = Field(..., description="Parent memory ID")
+    revision_number: int = Field(..., description="Sequential revision number")
+    previous_fact: str = Field(..., description="Fact before this revision")
+    new_fact: str = Field(..., description="Fact after this revision")
+    change_reason: str | None = Field(None, description="Reason for the change")
+    created_at: datetime = Field(..., description="When revision was created")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "id": "650e8400-e29b-41d4-a716-446655440000",
+                "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+                "revision_number": 1,
+                "previous_fact": "User prefers dark mode for coding",
+                "new_fact": "User prefers light mode for coding",
+                "change_reason": "User corrected their preference",
+                "created_at": "2024-12-05T11:00:00Z",
+                "updated_at": "2024-12-05T11:00:00Z",
+            }
+        },
+    }
+
+
+class RevisionListResponse(BaseModel):
+    """Response model for list of revisions."""
+
+    revisions: list[RevisionResponse] = Field(..., description="List of revisions")
+    total: int = Field(..., description="Total number of revisions")
+    limit: int = Field(..., description="Limit applied")
+    offset: int = Field(..., description="Offset applied")
+
+    model_config = {
+        "json_schema_extra": {"example": {"revisions": [], "total": 0, "limit": 10, "offset": 0}}
+    }

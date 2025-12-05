@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from services.memory.app.api.health import router as health_router
 from services.memory.app.api.v1.memories import router as memories_router
+from services.memory.app.api.v1.revisions import router as revisions_router
 from services.memory.app.core.config import get_settings
 
 
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     # Register routers
     app.include_router(health_router, tags=["health"])
     app.include_router(memories_router, tags=["memories"])
+    app.include_router(revisions_router, tags=["revisions"])
 
     return app
 
