@@ -2,7 +2,6 @@
 Tests for database session management.
 """
 
-
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 

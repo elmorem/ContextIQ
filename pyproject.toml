@@ -127,6 +127,10 @@ module = "tests.*"
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
+module = "services.*.tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
 module = "shared.*"
 warn_return_any = false
 

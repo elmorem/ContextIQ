@@ -1,0 +1,3 @@
+"""
+Sessions service application.
+"""

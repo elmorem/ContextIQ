@@ -2,7 +2,6 @@
 Tests for collection configuration utilities.
 """
 
-
 from shared.vector_store.collections import (
     CollectionConfig,
     DistanceMetric,
