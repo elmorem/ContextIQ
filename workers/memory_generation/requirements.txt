@@ -1,0 +1,3 @@
+# Pydantic for data models and settings
+pydantic==2.10.3
+pydantic-settings==2.6.1

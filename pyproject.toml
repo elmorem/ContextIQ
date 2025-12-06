@@ -60,7 +60,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["shared", "services"]
+packages = ["shared", "services", "workers"]
 
 [tool.black]
 line-length = 100
@@ -136,7 +136,7 @@ warn_return_any = false
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --strict-markers --cov=services --cov=shared --cov-report=term-missing --cov-report=html"
+addopts = "-ra -q --strict-markers --cov=services --cov=shared --cov=workers --cov-report=term-missing --cov-report=html"
 testpaths = ["tests", "services/*/tests"]
 asyncio_mode = "auto"
 markers = [
