@@ -1,0 +1,6 @@
+# RabbitMQ async client
+aio-pika==9.5.2
+
+# Pydantic for settings management
+pydantic==2.10.3
+pydantic-settings==2.6.1

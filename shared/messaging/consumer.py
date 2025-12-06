@@ -149,10 +149,12 @@ class MessageConsumer:
             )
 
             channel = self.client.get_channel()
-            await channel.default_exchange.publish(
-                reply_message,
-                routing_key=message.reply_to,
-            )
+            reply_to = message.reply_to
+            if reply_to:  # Type guard
+                await channel.default_exchange.publish(
+                    reply_message,
+                    routing_key=reply_to,
+                )
 
             logger.debug(
                 "reply_sent",
