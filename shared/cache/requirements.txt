@@ -1,0 +1,6 @@
+# Redis client for async operations
+redis==5.2.1
+
+# Pydantic for settings management
+pydantic==2.10.3
+pydantic-settings==2.6.1
