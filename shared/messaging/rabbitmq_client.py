@@ -5,8 +5,8 @@ RabbitMQ client with async connection management.
 from typing import Any
 
 import aio_pika
-from aio_pika import Channel, ExchangeType
-from aio_pika.abc import AbstractRobustConnection
+from aio_pika import ExchangeType
+from aio_pika.abc import AbstractChannel, AbstractRobustConnection
 
 from shared.config.logging import get_logger
 from shared.exceptions import MessagingError
@@ -39,7 +39,7 @@ class RabbitMQClient:
         self.connection_attempts = connection_attempts
         self.retry_delay = retry_delay
         self._connection: AbstractRobustConnection | None = None
-        self._channel: Channel | None = None
+        self._channel: AbstractChannel | None = None
         self._exchanges: dict[str, Any] = {}
         self._queues: dict[str, Any] = {}
 
@@ -83,7 +83,7 @@ class RabbitMQClient:
         except Exception as e:
             logger.error("rabbitmq_disconnect_failed", error=str(e))
 
-    def get_channel(self) -> Channel:
+    def get_channel(self) -> AbstractChannel:
         """
         Get RabbitMQ channel.
 
