@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database with PostGIS
   postgres:
-    image: postgres:15-alpine
+    image: postgis/postgis:15-3.4-alpine
     container_name: contextiq-postgres
     environment:
       POSTGRES_DB: contextiq
@@ -14,12 +14,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U contextiq"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - contextiq-network
 
   # Redis Cache
   redis:
@@ -29,11 +30,14 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - contextiq-network
 
   # Qdrant Vector Store
   qdrant:
@@ -51,6 +55,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - contextiq-network
 
   # RabbitMQ Message Queue
   rabbitmq:
@@ -69,6 +75,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - contextiq-network
 
   # Sessions Service
   sessions-service:
@@ -78,10 +86,18 @@ services:
     container_name: contextiq-sessions
     environment:
       - DATABASE_URL=postgresql+asyncpg://contextiq:contextiq_dev_password@postgres:5432/contextiq
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=contextiq
+      - DATABASE_USER=contextiq
+      - DATABASE_PASSWORD=contextiq_dev_password
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
     ports:
-      - "8001:8000"
+      - "8001:8001"
     volumes:
       - ./services/sessions:/app/services/sessions
       - ./shared:/app/shared
@@ -90,7 +106,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - contextiq-network
+    restart: unless-stopped
 
   # Memory Service
   memory-service:
@@ -100,12 +118,26 @@ services:
     container_name: contextiq-memory
     environment:
       - DATABASE_URL=postgresql+asyncpg://contextiq:contextiq_dev_password@postgres:5432/contextiq
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=contextiq
+      - DATABASE_USER=contextiq
+      - DATABASE_PASSWORD=contextiq_dev_password
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - QDRANT_URL=http://qdrant:6333
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
       - RABBITMQ_URL=amqp://contextiq:contextiq_dev_password@rabbitmq:5672/
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=contextiq
+      - RABBITMQ_PASSWORD=contextiq_dev_password
       - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
     ports:
-      - "8002:8000"
+      - "8002:8002"
     volumes:
       - ./services/memory:/app/services/memory
       - ./shared:/app/shared
@@ -118,49 +150,42 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - contextiq-network
+    restart: unless-stopped
 
-  # Procedural Memory Service
-  procedural-service:
+  # Memory Generation Worker
+  memory-generation-worker:
     build:
       context: .
-      dockerfile: services/procedural/Dockerfile
-    container_name: contextiq-procedural
+      dockerfile: workers/memory_generation/Dockerfile
+    container_name: contextiq-memory-generation-worker
     environment:
       - DATABASE_URL=postgresql+asyncpg://contextiq:contextiq_dev_password@postgres:5432/contextiq
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=contextiq
+      - DATABASE_USER=contextiq
+      - DATABASE_PASSWORD=contextiq_dev_password
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - QDRANT_URL=http://qdrant:6333
-      - LOG_LEVEL=DEBUG
-    ports:
-      - "8003:8000"
-    volumes:
-      - ./services/procedural:/app/services/procedural
-      - ./shared:/app/shared
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-  # Extraction Worker
-  extraction-worker:
-    build:
-      context: .
-      dockerfile: services/workers/extraction/Dockerfile
-    container_name: contextiq-extraction-worker
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://contextiq:contextiq_dev_password@postgres:5432/contextiq
-      - REDIS_URL=redis://redis:6379/0
-      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
       - RABBITMQ_URL=amqp://contextiq:contextiq_dev_password@rabbitmq:5672/
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=contextiq
+      - RABBITMQ_PASSWORD=contextiq_dev_password
       - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - WORKER_CONCURRENCY=5
+      - WORKER_PREFETCH_COUNT=10
     volumes:
-      - ./services/workers/extraction:/app/services/workers/extraction
+      - ./workers/memory_generation:/app/workers/memory_generation
       - ./shared:/app/shared
     depends_on:
       postgres:
@@ -171,24 +196,42 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    command: python -m app.worker
+    networks:
+      - contextiq-network
+    restart: unless-stopped
 
   # Consolidation Worker
   consolidation-worker:
     build:
       context: .
-      dockerfile: services/workers/consolidation/Dockerfile
+      dockerfile: workers/consolidation/Dockerfile
     container_name: contextiq-consolidation-worker
     environment:
       - DATABASE_URL=postgresql+asyncpg://contextiq:contextiq_dev_password@postgres:5432/contextiq
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=contextiq
+      - DATABASE_USER=contextiq
+      - DATABASE_PASSWORD=contextiq_dev_password
       - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - QDRANT_URL=http://qdrant:6333
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
       - RABBITMQ_URL=amqp://contextiq:contextiq_dev_password@rabbitmq:5672/
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=contextiq
+      - RABBITMQ_PASSWORD=contextiq_dev_password
       - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - WORKER_CONCURRENCY=5
+      - WORKER_PREFETCH_COUNT=10
     volumes:
-      - ./services/workers/consolidation:/app/services/workers/consolidation
+      - ./workers/consolidation:/app/workers/consolidation
       - ./shared:/app/shared
     depends_on:
       postgres:
@@ -199,38 +242,20 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    command: python -m app.worker
-
-  # API Gateway
-  api-gateway:
-    build:
-      context: .
-      dockerfile: services/api-gateway/Dockerfile
-    container_name: contextiq-api-gateway
-    environment:
-      - SESSIONS_SERVICE_URL=http://sessions-service:8000
-      - MEMORY_SERVICE_URL=http://memory-service:8000
-      - PROCEDURAL_SERVICE_URL=http://procedural-service:8000
-      - REDIS_URL=redis://redis:6379/0
-      - LOG_LEVEL=DEBUG
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./services/api-gateway:/app/services/api-gateway
-      - ./shared:/app/shared
-    depends_on:
-      - sessions-service
-      - memory-service
-      - procedural-service
-      - redis
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - contextiq-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   qdrant_data:
+    driver: local
   rabbitmq_data:
+    driver: local
 
 networks:
-  default:
-    name: contextiq-network
+  contextiq-network:
+    driver: bridge

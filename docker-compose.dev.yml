@@ -1,0 +1,30 @@
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+version: '3.8'
+
+services:
+  # Sessions Service - Development with hot reload
+  sessions-service:
+    command: uvicorn services.sessions.app.main:app --host 0.0.0.0 --port 8001 --reload --log-level debug
+    environment:
+      - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
+
+  # Memory Service - Development with hot reload
+  memory-service:
+    command: uvicorn services.memory.app.main:app --host 0.0.0.0 --port 8002 --reload --log-level debug
+    environment:
+      - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
+
+  # Memory Generation Worker - Development
+  memory-generation-worker:
+    environment:
+      - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
+
+  # Consolidation Worker - Development
+  consolidation-worker:
+    environment:
+      - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
