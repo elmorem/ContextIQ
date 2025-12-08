@@ -3,6 +3,7 @@ Database utilities and configuration.
 """
 
 from shared.database.base import Base, TimestampMixin, utc_now
+from shared.database.config import DatabaseSettings, get_database_settings
 from shared.database.connection import DatabaseConfig, DatabaseConnection
 from shared.database.session import (
     close_database,
@@ -24,6 +25,9 @@ __all__ = [
     "Base",
     "TimestampMixin",
     "utc_now",
+    # Config
+    "DatabaseSettings",
+    "get_database_settings",
     # Connection
     "DatabaseConfig",
     "DatabaseConnection",
