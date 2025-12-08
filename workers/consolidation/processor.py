@@ -9,6 +9,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from shared.clients import MemoryServiceClient
 from shared.consolidation import ConsolidationEngine
 from shared.embedding import EmbeddingService
 from workers.consolidation.models import ConsolidationRequest, ConsolidationResult
@@ -27,6 +28,7 @@ class ConsolidationProcessor:
         self,
         consolidation_engine: ConsolidationEngine,
         embedding_service: EmbeddingService,
+        memory_client: MemoryServiceClient,
     ):
         """
         Initialize consolidation processor.
@@ -34,9 +36,11 @@ class ConsolidationProcessor:
         Args:
             consolidation_engine: Engine for consolidating memories
             embedding_service: Service for embedding operations
+            memory_client: HTTP client for Memory Service
         """
         self.consolidation_engine = consolidation_engine
         self.embedding_service = embedding_service
+        self.memory_client = memory_client
 
     async def process_request(
         self,
@@ -54,10 +58,34 @@ class ConsolidationProcessor:
         logger.info(f"Processing consolidation for scope {request.scope}")
 
         try:
-            # Step 1: Fetch memories for the scope
-            # TODO: Integrate with Memory Service to fetch memories
-            # For now, using empty list as placeholder
-            memories: list[dict[str, Any]] = []
+            # Step 1: Fetch memories for the scope from Memory Service
+            logger.info(f"Fetching memories for scope {request.scope}")
+
+            try:
+                # Build query parameters based on scope
+                scope_type = request.scope.get("type")
+                query_params: dict[str, Any] = {"limit": request.max_memories}
+
+                if scope_type == "user" and request.user_id:
+                    query_params["scope_user_id"] = str(request.user_id)
+                elif scope_type == "org" and request.scope.get("org_id"):
+                    query_params["scope_org_id"] = request.scope["org_id"]
+                # For global scope, no additional filters needed
+
+                # Fetch memories from Memory Service
+                memories_response = await self.memory_client.list_memories(**query_params)
+                memories = memories_response.get("memories", [])
+
+                logger.info(f"Retrieved {len(memories)} memories from Memory Service")
+
+            except Exception as e:
+                logger.error(f"Failed to fetch memories from Memory Service: {e}")
+                return ConsolidationResult(
+                    scope=request.scope,
+                    memories_processed=0,
+                    success=False,
+                    error=f"Failed to fetch memories: {str(e)}",
+                )
 
             if not memories:
                 logger.info(f"No memories found for scope {request.scope}")
@@ -79,9 +107,9 @@ class ConsolidationProcessor:
                     fact=mem.get("fact", ""),
                     confidence=mem.get("confidence", 0.0),
                     embedding=mem.get("embedding", []),
-                    source_session_id=UUID(mem["source_session_id"])
-                    if mem.get("source_session_id")
-                    else None,
+                    source_session_id=(
+                        UUID(mem["source_session_id"]) if mem.get("source_session_id") else None
+                    ),
                     metadata=mem.get("metadata"),
                 )
                 for mem in memories
@@ -109,16 +137,8 @@ class ConsolidationProcessor:
                 f"{consolidation_result.conflict_count} conflicts"
             )
 
-            # Step 3: Update database with merged memories
-            # TODO: Integrate with Memory Service to:
-            # 1. Create new merged memory records
-            # 2. Update or soft-delete superseded memories
-            # 3. Create revision entries for audit trail
-            # 4. Handle conflicts (flag for review or auto-resolve)
-
-            memories_updated = 0  # Placeholder for actual DB update count
-
-            # Step 4: Update embeddings for merged memories
+            # Step 3: Generate embeddings for merged memories
+            merged_embeddings: list[list[float]] = []
             if consolidation_result.merged_memories:
                 merged_facts = [m.fact for m in consolidation_result.merged_memories]
                 embedding_result = self.embedding_service.generate_embeddings(merged_facts)
@@ -132,6 +152,50 @@ class ConsolidationProcessor:
                     logger.info(
                         f"Generated {embedding_result.count} embeddings for merged memories"
                     )
+                    merged_embeddings = embedding_result.embeddings
+
+            # Step 4: Save consolidated memories to Memory Service
+            logger.info(f"Saving {len(consolidation_result.merged_memories)} consolidated memories")
+
+            memories_updated = 0
+            failed_updates = []
+
+            # Build scope dict for Memory Service
+            scope_dict: dict[str, str] = {}
+            scope_type = request.scope.get("type")
+            if scope_type == "user" and request.user_id:
+                scope_dict["user_id"] = str(request.user_id)
+            elif scope_type == "org" and request.scope.get("org_id"):
+                scope_dict["org_id"] = request.scope["org_id"]
+
+            # Save each merged memory
+            for idx, merged_memory in enumerate(consolidation_result.merged_memories):
+                try:
+                    # Get embedding for this merged memory
+                    embedding = merged_embeddings[idx] if idx < len(merged_embeddings) else None
+
+                    # Create consolidated memory via Memory Service
+                    await self.memory_client.create_memory(
+                        scope=scope_dict,
+                        fact=merged_memory.fact,
+                        source_type="consolidated",
+                        embedding=embedding,
+                        confidence=merged_memory.confidence,
+                        importance=0.7,  # Consolidated memories are typically important
+                    )
+                    memories_updated += 1
+
+                    # TODO: Mark superseded memories as soft-deleted
+                    # This would require additional Memory Service API to update memory status
+
+                except Exception as e:
+                    logger.error(f"Failed to save consolidated memory {idx + 1}: {e}")
+                    failed_updates.append(idx)
+
+            logger.info(
+                f"Successfully saved {memories_updated}/{len(consolidation_result.merged_memories)} "
+                f"consolidated memories"
+            )
 
             return ConsolidationResult(
                 scope=request.scope,

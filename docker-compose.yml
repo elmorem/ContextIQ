@@ -232,6 +232,10 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=contextiq
       - RABBITMQ_PASSWORD=contextiq_dev_password
+      - MEMORY_SERVICE_URL=http://memory-service:8002
+      - MEMORY_SERVICE_TIMEOUT=30
+      - MEMORY_SERVICE_MAX_RETRIES=3
+      - MEMORY_SERVICE_RETRY_DELAY=1.0
       - LOG_LEVEL=DEBUG
       - ENVIRONMENT=development
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
