@@ -14,6 +14,8 @@ import json
 import logging
 from typing import Any
 
+from shared.clients import MemoryServiceClient, SessionsServiceClient
+from shared.clients.config import HTTPClientSettings
 from shared.embedding import EmbeddingService, EmbeddingSettings
 from shared.extraction import ExtractionEngine, ExtractionSettings
 from shared.messaging import MessageConsumer
@@ -41,6 +43,7 @@ class MemoryGenerationWorker:
         embedding_settings: EmbeddingSettings | None = None,
         qdrant_settings: QdrantSettings | None = None,
         messaging_settings: MessagingSettings | None = None,
+        http_client_settings: HTTPClientSettings | None = None,
     ):
         """
         Initialize memory generation worker.
@@ -51,19 +54,37 @@ class MemoryGenerationWorker:
             embedding_settings: Embedding service settings
             qdrant_settings: Qdrant client settings
             messaging_settings: RabbitMQ messaging settings
+            http_client_settings: HTTP client configuration
         """
         self.worker_settings = worker_settings or get_worker_settings()
+        self.http_client_settings = http_client_settings or HTTPClientSettings()
 
         # Initialize services
         self.extraction_engine = ExtractionEngine(settings=extraction_settings)
         self.embedding_service = EmbeddingService(settings=embedding_settings)
         self.vector_store = QdrantClientWrapper(settings=qdrant_settings)
 
-        # Initialize processor
+        # Initialize HTTP service clients
+        self.sessions_client = SessionsServiceClient(
+            base_url=self.http_client_settings.sessions_service_url,
+            timeout=self.http_client_settings.sessions_service_timeout,
+            max_retries=self.http_client_settings.sessions_service_max_retries,
+            retry_delay=self.http_client_settings.sessions_service_retry_delay,
+        )
+        self.memory_client = MemoryServiceClient(
+            base_url=self.http_client_settings.memory_service_url,
+            timeout=self.http_client_settings.memory_service_timeout,
+            max_retries=self.http_client_settings.memory_service_max_retries,
+            retry_delay=self.http_client_settings.memory_service_retry_delay,
+        )
+
+        # Initialize processor with HTTP clients
         self.processor = MemoryGenerationProcessor(
             extraction_engine=self.extraction_engine,
             embedding_service=self.embedding_service,
             vector_store=self.vector_store,
+            sessions_client=self.sessions_client,
+            memory_client=self.memory_client,
         )
 
         # Initialize message consumer
@@ -114,6 +135,10 @@ class MemoryGenerationWorker:
         if self.consumer:
             await self.consumer.close()  # type: ignore[attr-defined]
 
+        # Close HTTP clients
+        await self.sessions_client.close()
+        await self.memory_client.close()
+
         self.extraction_engine.close()
         self.embedding_service.close()
         self.vector_store.close()
@@ -142,24 +167,16 @@ class MemoryGenerationWorker:
             message_data = json.loads(body.decode("utf-8"))
             request = MemoryGenerationRequest(**message_data)
 
-            logger.info(
-                f"Received memory generation request for session {request.session_id}"
-            )
+            logger.info(f"Received memory generation request for session {request.session_id}")
 
             # Validate request
             is_valid, error = self.processor.validate_request(request)
             if not is_valid:
-                logger.error(
-                    f"Invalid request for session {request.session_id}: {error}"
-                )
+                logger.error(f"Invalid request for session {request.session_id}: {error}")
                 return False
 
-            # TODO: Fetch conversation events from Sessions Service
-            # For now, using empty list as placeholder
-            conversation_events: list[dict[str, str]] = []
-
-            # Process the request
-            result = await self.processor.process_request(request, conversation_events)
+            # Process the request (processor now fetches events from Sessions Service)
+            result = await self.processor.process_request(request)
 
             if result.success:
                 logger.info(
@@ -169,9 +186,7 @@ class MemoryGenerationWorker:
                 )
                 return True
             else:
-                logger.error(
-                    f"Failed to process session {request.session_id}: {result.error}"
-                )
+                logger.error(f"Failed to process session {request.session_id}: {result.error}")
                 return False
 
         except json.JSONDecodeError as e:

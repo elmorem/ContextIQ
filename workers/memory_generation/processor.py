@@ -5,13 +5,12 @@ Orchestrates the memory extraction and embedding pipeline for a session.
 """
 
 import logging
-from uuid import UUID
 
+from shared.clients import MemoryServiceClient, SessionsServiceClient
 from shared.embedding import EmbeddingService
 from shared.extraction import ExtractionEngine
 from shared.vector_store import QdrantClientWrapper
 from workers.memory_generation.models import (
-    ExtractedMemory,
     MemoryGenerationRequest,
     MemoryGenerationResult,
 )
@@ -32,6 +31,8 @@ class MemoryGenerationProcessor:
         extraction_engine: ExtractionEngine,
         embedding_service: EmbeddingService,
         vector_store: QdrantClientWrapper,
+        sessions_client: SessionsServiceClient,
+        memory_client: MemoryServiceClient,
     ):
         """
         Initialize memory generation processor.
@@ -40,22 +41,24 @@ class MemoryGenerationProcessor:
             extraction_engine: Engine for extracting memories from conversations
             embedding_service: Service for generating embeddings
             vector_store: Vector store client for storing embeddings
+            sessions_client: HTTP client for Sessions Service
+            memory_client: HTTP client for Memory Service
         """
         self.extraction_engine = extraction_engine
         self.embedding_service = embedding_service
         self.vector_store = vector_store
+        self.sessions_client = sessions_client
+        self.memory_client = memory_client
 
     async def process_request(
         self,
         request: MemoryGenerationRequest,
-        conversation_events: list[dict[str, str]],
     ) -> MemoryGenerationResult:
         """
         Process memory generation request.
 
         Args:
             request: Memory generation request
-            conversation_events: List of conversation events with speaker and content
 
         Returns:
             MemoryGenerationResult with processing details
@@ -66,7 +69,38 @@ class MemoryGenerationProcessor:
         )
 
         try:
-            # Step 1: Extract memories from conversation
+            # Step 1: Fetch conversation events from Sessions Service
+            logger.info(f"Fetching events for session {request.session_id}")
+
+            try:
+                events_response = await self.sessions_client.list_events(
+                    session_id=request.session_id, limit=1000  # Get all events for the session
+                )
+
+                # Transform events into format expected by extraction engine
+                conversation_events = [
+                    {
+                        "speaker": event.get("event_type", "user"),
+                        "content": event.get("data", {}).get("content", ""),
+                    }
+                    for event in events_response.get("events", [])
+                    if event.get("data", {}).get("content")
+                ]
+
+                logger.info(
+                    f"Retrieved {len(conversation_events)} events from session {request.session_id}"
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to fetch events from Sessions Service: {e}")
+                return MemoryGenerationResult(
+                    session_id=request.session_id,
+                    user_id=request.user_id,
+                    success=False,
+                    error=f"Failed to fetch session events: {str(e)}",
+                )
+
+            # Step 2: Extract memories from conversation
             extraction_result = self.extraction_engine.extract_memories(
                 conversation_events=conversation_events,
                 min_confidence=0.5,
@@ -87,9 +121,7 @@ class MemoryGenerationProcessor:
 
             # If no error but also no memories, that's still success
             if extraction_result.memory_count == 0:
-                logger.info(
-                    f"No memories extracted for session {request.session_id}"
-                )
+                logger.info(f"No memories extracted for session {request.session_id}")
                 return MemoryGenerationResult(
                     session_id=request.session_id,
                     user_id=request.user_id,
@@ -125,24 +157,67 @@ class MemoryGenerationProcessor:
                 f"for session {request.session_id}"
             )
 
-            # Step 3: Store memories and embeddings
-            # This would integrate with Memory Service to save to database
-            # and Qdrant to store vectors
-            # For now, we'll return success with counts
+            # Step 3: Store memories to Memory Service
+            logger.info(f"Saving {extraction_result.memory_count} memories to Memory Service")
 
+            saved_count = 0
+            failed_saves = []
+
+            # Build scope based on request scope type
+            # For user scope, include user_id
+            # For org or global scope, we'd need additional fields in the request
+            # For now, we only support user scope properly
+            scope = {}
+            if request.scope == "user":
+                scope["user_id"] = str(request.user_id)
+
+            # Save each memory with its embedding
+            for idx, memory_data in enumerate(extraction_result.memories):
+                try:
+                    # Get corresponding embedding
+                    embedding = (
+                        embedding_result.embeddings[idx]
+                        if idx < len(embedding_result.embeddings)
+                        else None
+                    )
+
+                    # Create memory via Memory Service
+                    await self.memory_client.create_memory(
+                        scope=scope,
+                        fact=memory_data["fact"],
+                        source_type="extracted",
+                        source_id=str(request.session_id),
+                        topic=memory_data.get("topic"),
+                        embedding=embedding,
+                        confidence=memory_data.get("confidence", 1.0),
+                        importance=memory_data.get("importance", 0.5),
+                    )
+                    saved_count += 1
+
+                except Exception as e:
+                    logger.error(
+                        f"Failed to save memory {idx + 1}/{extraction_result.memory_count}: {e}"
+                    )
+                    failed_saves.append(idx)
+
+            logger.info(
+                f"Successfully saved {saved_count}/{extraction_result.memory_count} memories "
+                f"for session {request.session_id}"
+            )
+
+            # Return result with actual counts
             return MemoryGenerationResult(
                 session_id=request.session_id,
                 user_id=request.user_id,
                 memories_extracted=extraction_result.memory_count,
-                memories_saved=extraction_result.memory_count,  # Would be actual count from DB
+                memories_saved=saved_count,
                 embeddings_generated=embedding_result.count,
                 success=True,
+                error=f"Failed to save {len(failed_saves)} memories" if failed_saves else None,
             )
 
         except Exception as e:
-            logger.exception(
-                f"Unexpected error processing session {request.session_id}: {e}"
-            )
+            logger.exception(f"Unexpected error processing session {request.session_id}: {e}")
             return MemoryGenerationResult(
                 session_id=request.session_id,
                 user_id=request.user_id,
