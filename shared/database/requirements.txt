@@ -1,0 +1,9 @@
+# PostgreSQL async driver
+asyncpg==0.30.0
+
+# SQLAlchemy with async support
+sqlalchemy[asyncio]==2.0.36
+
+# Pydantic for settings management
+pydantic==2.10.3
+pydantic-settings==2.6.1
