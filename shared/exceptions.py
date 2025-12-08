@@ -236,3 +236,34 @@ class ConfigurationError(ContextIQError):
         """
         details = {"key": key} if key else {}
         super().__init__(message, error_code="CONFIGURATION_ERROR", details=details)
+
+
+# Service Communication Errors
+
+
+class ServiceCommunicationError(ContextIQError):
+    """Service communication errors."""
+
+    pass
+
+
+class ServiceUnavailableError(ServiceCommunicationError):
+    """Service is unavailable."""
+
+    def __init__(self, message: str = "Service is unavailable"):
+        """Initialize exception."""
+        super().__init__(message, error_code="SERVICE_UNAVAILABLE")
+
+
+class ServiceTimeoutError(ServiceCommunicationError):
+    """Service request timed out."""
+
+    def __init__(self, service: str, message: str = "Service request timed out"):
+        """
+        Initialize exception.
+
+        Args:
+            service: Service name
+            message: Error message
+        """
+        super().__init__(message, error_code="SERVICE_TIMEOUT", details={"service": service})
