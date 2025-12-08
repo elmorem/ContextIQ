@@ -1,6 +1,5 @@
 """Tests for database configuration."""
 
-
 import pytest
 
 from shared.database.config import DatabaseSettings, get_database_settings
