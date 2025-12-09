@@ -14,6 +14,8 @@ import json
 import logging
 from typing import Any
 
+from shared.clients import MemoryServiceClient
+from shared.clients.config import HTTPClientSettings
 from shared.consolidation import ConsolidationEngine, ConsolidationSettings
 from shared.embedding import EmbeddingService, EmbeddingSettings
 from shared.messaging import MessageConsumer
@@ -41,6 +43,7 @@ class ConsolidationWorker:
         consolidation_settings: ConsolidationSettings | None = None,
         embedding_settings: EmbeddingSettings | None = None,
         messaging_settings: MessagingSettings | None = None,
+        http_client_settings: HTTPClientSettings | None = None,
     ):
         """
         Initialize consolidation worker.
@@ -50,17 +53,28 @@ class ConsolidationWorker:
             consolidation_settings: Consolidation engine settings
             embedding_settings: Embedding service settings
             messaging_settings: RabbitMQ messaging settings
+            http_client_settings: HTTP client configuration
         """
         self.worker_settings = worker_settings or get_consolidation_worker_settings()
+        self.http_client_settings = http_client_settings or HTTPClientSettings()
 
         # Initialize services
         self.consolidation_engine = ConsolidationEngine(settings=consolidation_settings)
         self.embedding_service = EmbeddingService(settings=embedding_settings)
 
-        # Initialize processor
+        # Initialize HTTP service client
+        self.memory_client = MemoryServiceClient(
+            base_url=self.http_client_settings.memory_service_url,
+            timeout=self.http_client_settings.memory_service_timeout,
+            max_retries=self.http_client_settings.memory_service_max_retries,
+            retry_delay=self.http_client_settings.memory_service_retry_delay,
+        )
+
+        # Initialize processor with HTTP client
         self.processor = ConsolidationProcessor(
             consolidation_engine=self.consolidation_engine,
             embedding_service=self.embedding_service,
+            memory_client=self.memory_client,
         )
 
         # Initialize message consumer
@@ -110,6 +124,9 @@ class ConsolidationWorker:
         # Close connections
         if self.consumer:
             await self.consumer.close()  # type: ignore[attr-defined]
+
+        # Close HTTP client
+        await self.memory_client.close()
 
         self.consolidation_engine.close()
         self.embedding_service.close()
