@@ -3,14 +3,9 @@ Memory generation worker.
 
 Background worker that consumes memory generation requests from RabbitMQ
 and processes them through the extraction/embedding pipeline.
-
-NOTE: This worker currently uses a placeholder RabbitMQ integration.
-TODO: Integrate with shared.messaging.MessageConsumer and shared.messaging.RabbitMQClient
-for proper queue management and message consumption.
 """
 
 import asyncio
-import json
 import logging
 from typing import Any
 
@@ -18,8 +13,9 @@ from shared.clients import MemoryServiceClient, SessionsServiceClient
 from shared.clients.config import HTTPClientSettings
 from shared.embedding import EmbeddingService, EmbeddingSettings
 from shared.extraction import ExtractionEngine, ExtractionSettings
-from shared.messaging import MessageConsumer
-from shared.messaging.config import MessagingSettings  # type: ignore[import-untyped]
+from shared.messaging import MessageConsumer, RabbitMQClient
+from shared.messaging.config import MessagingSettings
+from shared.messaging.queues import Queues
 from shared.vector_store import QdrantClientWrapper, QdrantSettings
 from workers.memory_generation.config import WorkerSettings, get_worker_settings
 from workers.memory_generation.models import MemoryGenerationRequest
@@ -87,9 +83,10 @@ class MemoryGenerationWorker:
             memory_client=self.memory_client,
         )
 
-        # Initialize message consumer
-        # TODO: Update to use shared.messaging.MessageConsumer properly
-        self.consumer = MessageConsumer(settings=messaging_settings)  # type: ignore[call-arg]
+        # Initialize RabbitMQ client and consumer
+        self.messaging_settings = messaging_settings or MessagingSettings()
+        self.rabbitmq_client = RabbitMQClient(url=self.messaging_settings.rabbitmq_url)
+        self.consumer = MessageConsumer(client=self.rabbitmq_client)
 
         self._is_running = False
 
@@ -104,17 +101,13 @@ class MemoryGenerationWorker:
 
         try:
             # Connect to RabbitMQ
-            await self.consumer.connect()  # type: ignore[attr-defined]
+            await self.rabbitmq_client.connect()
 
-            # Declare queue and start consuming
-            await self.consumer.declare_queue(  # type: ignore[attr-defined]
-                queue_name=self.worker_settings.memory_generation_queue,
-                durable=True,
-            )
-
-            await self.consumer.consume(  # type: ignore[call-arg]
-                queue_name=self.worker_settings.memory_generation_queue,
-                callback=self.handle_message,
+            # Start consuming messages from extraction requests queue
+            await self.consumer.run_consumer(
+                queue_config=Queues.EXTRACTION_REQUESTS,
+                handler=self.handle_message,
+                auto_ack=False,
                 prefetch_count=self.worker_settings.worker_prefetch_count,
             )
 
@@ -131,9 +124,10 @@ class MemoryGenerationWorker:
 
         self._is_running = False
 
-        # Close connections
-        if self.consumer:
-            await self.consumer.close()  # type: ignore[attr-defined]
+        # Stop consumer and close RabbitMQ connection
+        self.consumer.stop()
+        await self.consumer.stop_all()
+        await self.rabbitmq_client.disconnect()
 
         # Close HTTP clients
         await self.sessions_client.close()
@@ -147,24 +141,19 @@ class MemoryGenerationWorker:
 
     async def handle_message(
         self,
-        body: bytes,
-        delivery_tag: int,
-        properties: Any,
-    ) -> bool:
+        message_data: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """
         Handle incoming memory generation request message.
 
         Args:
-            body: Message body bytes
-            delivery_tag: Message delivery tag for acknowledgment
-            properties: Message properties
+            message_data: Parsed message data
 
         Returns:
-            True if message processed successfully, False otherwise
+            Result dict if successful, None otherwise
         """
         try:
-            # Parse message
-            message_data = json.loads(body.decode("utf-8"))
+            # Parse request
             request = MemoryGenerationRequest(**message_data)
 
             logger.info(f"Received memory generation request for session {request.session_id}")
@@ -173,7 +162,7 @@ class MemoryGenerationWorker:
             is_valid, error = self.processor.validate_request(request)
             if not is_valid:
                 logger.error(f"Invalid request for session {request.session_id}: {error}")
-                return False
+                raise ValueError(f"Invalid request: {error}")
 
             # Process the request (processor now fetches events from Sessions Service)
             result = await self.processor.process_request(request)
@@ -184,17 +173,23 @@ class MemoryGenerationWorker:
                     f"{result.memories_extracted} memories extracted, "
                     f"{result.embeddings_generated} embeddings generated"
                 )
-                return True
+                # Return result for potential reply queue
+                return {
+                    "session_id": str(result.session_id),
+                    "user_id": str(result.user_id),
+                    "memories_extracted": result.memories_extracted,
+                    "memories_saved": result.memories_saved,
+                    "embeddings_generated": result.embeddings_generated,
+                    "success": True,
+                }
             else:
                 logger.error(f"Failed to process session {request.session_id}: {result.error}")
-                return False
+                raise RuntimeError(f"Processing failed: {result.error}")
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to decode message: {e}")
-            return False
         except Exception as e:
             logger.exception(f"Error handling message: {e}")
-            return False
+            # Re-raise to trigger message requeue
+            raise
 
     @property
     def is_running(self) -> bool:

@@ -3,14 +3,9 @@ Consolidation worker.
 
 Background worker that consumes consolidation requests from RabbitMQ
 and processes memory deduplication and merging.
-
-NOTE: This worker currently uses a placeholder RabbitMQ integration.
-TODO: Integrate with shared.messaging.MessageConsumer and shared.messaging.RabbitMQClient
-for proper queue management and message consumption.
 """
 
 import asyncio
-import json
 import logging
 from typing import Any
 
@@ -18,8 +13,9 @@ from shared.clients import MemoryServiceClient
 from shared.clients.config import HTTPClientSettings
 from shared.consolidation import ConsolidationEngine, ConsolidationSettings
 from shared.embedding import EmbeddingService, EmbeddingSettings
-from shared.messaging import MessageConsumer
-from shared.messaging.config import MessagingSettings  # type: ignore[import-untyped]
+from shared.messaging import MessageConsumer, RabbitMQClient
+from shared.messaging.config import MessagingSettings
+from shared.messaging.queues import Queues
 from workers.consolidation.config import (
     ConsolidationWorkerSettings,
     get_consolidation_worker_settings,
@@ -77,9 +73,10 @@ class ConsolidationWorker:
             memory_client=self.memory_client,
         )
 
-        # Initialize message consumer
-        # TODO: Update to use shared.messaging.MessageConsumer properly
-        self.consumer = MessageConsumer(settings=messaging_settings)  # type: ignore[call-arg]
+        # Initialize RabbitMQ client and consumer
+        self.messaging_settings = messaging_settings or MessagingSettings()
+        self.rabbitmq_client = RabbitMQClient(url=self.messaging_settings.rabbitmq_url)
+        self.consumer = MessageConsumer(client=self.rabbitmq_client)
 
         self._is_running = False
 
@@ -94,17 +91,13 @@ class ConsolidationWorker:
 
         try:
             # Connect to RabbitMQ
-            await self.consumer.connect()  # type: ignore[attr-defined]
+            await self.rabbitmq_client.connect()
 
-            # Declare queue and start consuming
-            await self.consumer.declare_queue(  # type: ignore[attr-defined]
-                queue_name=self.worker_settings.consolidation_queue,
-                durable=True,
-            )
-
-            await self.consumer.consume(  # type: ignore[call-arg]
-                queue_name=self.worker_settings.consolidation_queue,
-                callback=self.handle_message,
+            # Start consuming messages from consolidation requests queue
+            await self.consumer.run_consumer(
+                queue_config=Queues.CONSOLIDATION_REQUESTS,
+                handler=self.handle_message,
+                auto_ack=False,
                 prefetch_count=self.worker_settings.worker_prefetch_count,
             )
 
@@ -121,9 +114,10 @@ class ConsolidationWorker:
 
         self._is_running = False
 
-        # Close connections
-        if self.consumer:
-            await self.consumer.close()  # type: ignore[attr-defined]
+        # Stop consumer and close RabbitMQ connection
+        self.consumer.stop()
+        await self.consumer.stop_all()
+        await self.rabbitmq_client.disconnect()
 
         # Close HTTP client
         await self.memory_client.close()
@@ -135,24 +129,19 @@ class ConsolidationWorker:
 
     async def handle_message(
         self,
-        body: bytes,
-        delivery_tag: int,
-        properties: Any,
-    ) -> bool:
+        message_data: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """
         Handle incoming consolidation request message.
 
         Args:
-            body: Message body bytes
-            delivery_tag: Message delivery tag for acknowledgment
-            properties: Message properties
+            message_data: Parsed message data
 
         Returns:
-            True if message processed successfully, False otherwise
+            Result dict if successful, None otherwise
         """
         try:
-            # Parse message
-            message_data = json.loads(body.decode("utf-8"))
+            # Parse request
             request = ConsolidationRequest(**message_data)
 
             logger.info(f"Received consolidation request for scope {request.scope}")
@@ -161,7 +150,7 @@ class ConsolidationWorker:
             is_valid, error = self.processor.validate_request(request)
             if not is_valid:
                 logger.error(f"Invalid request for scope {request.scope}: {error}")
-                return False
+                raise ValueError(f"Invalid request: {error}")
 
             # Process the request
             result = await self.processor.process_request(request)
@@ -172,17 +161,23 @@ class ConsolidationWorker:
                     f"{result.memories_merged} merged, "
                     f"{result.conflicts_detected} conflicts"
                 )
-                return True
+                # Return result for potential reply queue
+                return {
+                    "scope": result.scope,
+                    "memories_processed": result.memories_processed,
+                    "memories_merged": result.memories_merged,
+                    "conflicts_detected": result.conflicts_detected,
+                    "memories_updated": result.memories_updated,
+                    "success": True,
+                }
             else:
                 logger.error(f"Failed to process scope {request.scope}: {result.error}")
-                return False
+                raise RuntimeError(f"Processing failed: {result.error}")
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to decode message: {e}")
-            return False
         except Exception as e:
             logger.exception(f"Error handling message: {e}")
-            return False
+            # Re-raise to trigger message requeue
+            raise
 
     @property
     def is_running(self) -> bool:
