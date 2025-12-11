@@ -1,6 +1,6 @@
 .PHONY: help install dev-install clean format lint type-check test test-unit test-integration test-cov \
         docker-build docker-up docker-down docker-logs docker-clean \
-        db-migrate db-upgrade db-downgrade db-revision db-seed db-reset \
+        db-init db-create db-upgrade db-downgrade db-current db-history db-reset db-migrate db-revision db-seed \
         qdrant-init rabbitmq-init services-health \
         run-sessions run-memory run-procedural run-workers run-gateway \
         pre-commit-install pre-commit-run
@@ -124,46 +124,68 @@ services-health: ## Check health status of all services
 
 # ==================== Database Migrations ====================
 
-db-migrate: ## Run all pending migrations
-	@echo "$(BLUE)Running database migrations...$(NC)"
-	docker-compose exec postgres psql -U contextiq -d contextiq -c "SELECT version();"
-	alembic upgrade head
-	@echo "$(GREEN)✓ Migrations completed$(NC)"
+db-init: ## Initialize database and extensions
+	@echo "$(BLUE)Initializing database...$(NC)"
+	python scripts/db_init.py
+	@echo "$(GREEN)✓ Database initialized$(NC)"
 
-db-upgrade: ## Upgrade database to a specific revision (usage: make db-upgrade REV=head)
-	@echo "$(BLUE)Upgrading database...$(NC)"
-	alembic upgrade $(or $(REV),head)
-	@echo "$(GREEN)✓ Database upgraded$(NC)"
-
-db-downgrade: ## Downgrade database to a specific revision (usage: make db-downgrade REV=-1)
-	@echo "$(BLUE)Downgrading database...$(NC)"
-	alembic downgrade $(or $(REV),-1)
-	@echo "$(GREEN)✓ Database downgraded$(NC)"
-
-db-revision: ## Create a new migration (usage: make db-revision MSG="add users table")
-	@if [ -z "$(MSG)" ]; then \
-		echo "$(RED)Error: MSG is required. Usage: make db-revision MSG='description'$(NC)"; \
+db-create: ## Create a new migration (usage: make db-create MESSAGE="add users table")
+	@if [ -z "$(MESSAGE)" ]; then \
+		echo "$(RED)Error: MESSAGE is required. Usage: make db-create MESSAGE='description'$(NC)"; \
 		exit 1; \
 	fi
-	@echo "$(BLUE)Creating new migration: $(MSG)$(NC)"
-	alembic revision --autogenerate -m "$(MSG)"
+	@echo "$(BLUE)Creating new migration: $(MESSAGE)$(NC)"
+	python scripts/db_migrate.py create "$(MESSAGE)"
 	@echo "$(GREEN)✓ Migration created$(NC)"
+
+db-upgrade: ## Upgrade database to latest (or specific revision: make db-upgrade REV=abc123)
+	@echo "$(BLUE)Upgrading database...$(NC)"
+	python scripts/db_migrate.py upgrade $(or $(REV),head)
+	@echo "$(GREEN)✓ Database upgraded$(NC)"
+
+db-downgrade: ## Downgrade database (usage: make db-downgrade REV=-1 or REV=abc123)
+	@if [ -z "$(REV)" ]; then \
+		echo "$(RED)Error: REV is required. Usage: make db-downgrade REV=-1$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)Downgrading database...$(NC)"
+	python scripts/db_migrate.py downgrade $(REV)
+	@echo "$(GREEN)✓ Database downgraded$(NC)"
+
+db-current: ## Show current database revision
+	@echo "$(BLUE)Current database revision:$(NC)"
+	python scripts/db_migrate.py current
+
+db-history: ## Show migration history
+	@echo "$(BLUE)Migration history:$(NC)"
+	python scripts/db_migrate.py history
+
+db-reset: ## Reset database to base and upgrade to latest
+	@echo "$(RED)⚠ This will reset the database schema$(NC)"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		python scripts/db_migrate.py downgrade base; \
+		python scripts/db_migrate.py upgrade head; \
+		echo "$(GREEN)✓ Database reset$(NC)"; \
+	fi
+
+# Legacy commands (deprecated, use new commands above)
+db-migrate: db-upgrade ## Deprecated: Use db-upgrade instead
+	@echo "$(YELLOW)⚠ db-migrate is deprecated, use db-upgrade instead$(NC)"
+
+db-revision: ## Deprecated: Use db-create instead
+	@echo "$(YELLOW)⚠ db-revision is deprecated, use db-create MESSAGE='...' instead$(NC)"
+	@if [ -z "$(MSG)" ]; then \
+		echo "$(RED)Error: MSG is required$(NC)"; \
+		exit 1; \
+	fi
+	python scripts/db_migrate.py create "$(MSG)"
 
 db-seed: ## Seed database with sample data
 	@echo "$(BLUE)Seeding database...$(NC)"
 	python scripts/seed_data.py
 	@echo "$(GREEN)✓ Database seeded$(NC)"
-
-db-reset: ## Reset database (drop and recreate)
-	@echo "$(RED)⚠ This will delete all data$(NC)"
-	@read -p "Are you sure? [y/N] " -n 1 -r; \
-	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		docker-compose exec postgres psql -U contextiq -c "DROP DATABASE IF EXISTS contextiq;"; \
-		docker-compose exec postgres psql -U contextiq -c "CREATE DATABASE contextiq;"; \
-		alembic upgrade head; \
-		echo "$(GREEN)✓ Database reset$(NC)"; \
-	fi
 
 # ==================== Service Initialization ====================
 
