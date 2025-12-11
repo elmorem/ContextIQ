@@ -8,10 +8,20 @@ ContextIQ is an open-source, production-ready context engineering platform that 
 
 - **Sessions Management**: Chronological conversation tracking with events and state
 - **Declarative Memory**: Long-term memory for user preferences, facts, and context
-- **Procedural Memory**: Workflow patterns, skills, and agent learning capabilities
+- **Procedural Memory**: Workflow patterns, skills, and agent learning capabilities (planned)
 - **Multi-Agent Support**: Built-in coordination patterns for multi-agent systems
 - **Framework Agnostic**: Direct REST APIs work with any agent framework (ADK, LangGraph, CrewAI, custom)
 - **Production Ready**: Scalable architecture with observability, security, and deployment strategies
+
+### Completed Features
+
+- **Core Services**: Sessions, Memory, and API Gateway all functional
+- **Database Layer**: PostgreSQL with Alembic migrations for schema management
+- **Message Queue**: RabbitMQ integration for asynchronous processing
+- **Background Workers**: Memory generation and consolidation workers
+- **Observability**: Prometheus metrics, OpenTelemetry tracing, structured logging
+- **Authentication**: JWT tokens and API keys with role-based permissions
+- **Migration Tooling**: Comprehensive database migration scripts and commands
 
 ## Architecture
 
@@ -60,6 +70,8 @@ ContextIQ is built as a microservices architecture:
    ```bash
    cp .env.example .env
    # Edit .env with your API keys and configuration
+   # IMPORTANT: Set your LLM API keys (OPENAI_API_KEY or ANTHROPIC_API_KEY)
+   # Configure authentication settings (AUTH_JWT_SECRET_KEY, AUTH_REQUIRE_AUTH)
    ```
 
 4. **Start development environment**
@@ -125,18 +137,29 @@ make docker-clean
 ### Database Migrations
 
 ```bash
+# Initialize database and extensions
+make db-init
+
 # Create a new migration
-make db-revision MSG="add new table"
+make db-create MESSAGE="add new table"
 
-# Run migrations
-make db-migrate
+# Upgrade to latest migration
+make db-upgrade
 
-# Rollback migration
-make db-downgrade
+# Downgrade one revision
+make db-downgrade REV=-1
+
+# Show current revision
+make db-current
+
+# Show migration history
+make db-history
 
 # Reset database (WARNING: deletes all data)
 make db-reset
 ```
+
+For more details, see the [Database Migrations Guide](docs/DATABASE_MIGRATIONS.md).
 
 ### Running Individual Services
 
@@ -161,9 +184,19 @@ make run-gateway
 
 ## Documentation
 
-- [System Architecture](docs/architecture/system_architecture.md)
+### Architecture & Design
+- [System Architecture](docs/ARCHITECTURE.md) - Complete architecture overview
 - [Data Models & Schemas](docs/architecture/data_models.md)
 - [Agent Engine Memory Bank Research](docs/agent_engine_memory_bank_research.md)
+
+### Usage Guides
+- [API Usage Guide](docs/API_USAGE.md) - API examples and best practices
+- [Authentication Guide](docs/AUTHENTICATION.md) - JWT tokens and API keys
+- [Database Migrations](docs/DATABASE_MIGRATIONS.md) - Schema management
+
+### Operations
+- [Deployment Guide](docs/DEPLOYMENT.md) - Local and production deployment
+- [Development Guide](docs/DEVELOPMENT.md) - Development environment setup
 
 ## API Usage Examples
 
@@ -307,19 +340,30 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Roadmap
 
-- [ ] Complete Sessions Service implementation
-- [ ] Complete Memory Service implementation
+### Completed
+- [x] Complete Sessions Service implementation
+- [x] Complete Memory Service implementation
+- [x] Implement background workers (Memory generation, Consolidation)
+- [x] API Gateway with routing and health checks
+- [x] Database migrations with Alembic
+- [x] Authentication (JWT tokens, API keys)
+- [x] Observability (Prometheus metrics, OpenTelemetry tracing)
+- [x] RabbitMQ message queue integration
+- [x] Comprehensive documentation
+
+### In Progress
+- [ ] Rate limiting implementation
+- [ ] Enhanced observability dashboards
+
+### Planned
 - [ ] Complete Procedural Memory Service implementation
-- [ ] Implement background workers
-- [ ] API Gateway with rate limiting
-- [ ] OpenAPI/Swagger documentation
+- [ ] OpenAPI/Swagger documentation enhancements
 - [ ] Python SDK
 - [ ] TypeScript SDK
 - [ ] ADK integration adapter
-- [ ] LangGraph integration
-- [ ] CrewAI integration
-- [ ] Production deployment guide
-- [ ] Observability dashboard
+- [ ] LangGraph integration examples
+- [ ] CrewAI integration examples
+- [ ] Kubernetes deployment manifests
 - [ ] Security audit
 - [ ] Performance benchmarks
 - [ ] Cloud-managed offering
