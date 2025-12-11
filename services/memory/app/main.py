@@ -14,9 +14,16 @@ from services.memory.app.api.health import router as health_router
 from services.memory.app.api.v1.memories import router as memories_router
 from services.memory.app.api.v1.revisions import router as revisions_router
 from services.memory.app.core.config import get_settings
+from shared.auth.api_key import APIKeyHandler
+from shared.auth.config import AuthSettings
+from shared.auth.jwt import JWTHandler
+from shared.auth.middleware import AuthenticationMiddleware
+from shared.config.logging import get_logger
 from shared.observability.metrics import get_metrics
 from shared.observability.middleware import MetricsMiddleware
 from shared.observability.tracing import instrument_fastapi, setup_tracing
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -36,6 +43,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         service_version=settings.service_version,
         console_export=settings.debug,
     )
+
+    # Load authentication settings
+    auth_settings = AuthSettings()
+    app.state.auth_settings = auth_settings
+
+    if auth_settings.require_auth:
+        logger.info("authentication_enabled", service="memory", require_auth=True)
+    else:
+        logger.warning("authentication_disabled", service="memory", require_auth=False)
 
     yield
 
@@ -59,6 +75,20 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,
     )
+
+    # Authentication middleware (if enabled)
+    auth_settings = AuthSettings()
+    if auth_settings.require_auth:
+        jwt_handler = JWTHandler(secret_key=auth_settings.jwt_secret_key)
+        api_key_handler = APIKeyHandler()
+
+        app.add_middleware(
+            AuthenticationMiddleware,
+            jwt_handler=jwt_handler,
+            api_key_handler=api_key_handler,
+            exempt_paths=auth_settings.require_auth_exceptions,
+        )
+        logger.info("authentication_middleware_added", service="memory")
 
     # CORS middleware
     app.add_middleware(

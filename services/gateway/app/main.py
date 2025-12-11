@@ -17,6 +17,10 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from shared.auth.api_key import APIKeyHandler
+from shared.auth.config import AuthSettings
+from shared.auth.jwt import JWTHandler
+from shared.auth.middleware import AuthenticationMiddleware
 from shared.config.logging import get_logger
 from shared.observability.metrics import get_metrics
 from shared.observability.middleware import MetricsMiddleware
@@ -48,6 +52,15 @@ async def lifespan(app: FastAPI) -> Any:
         console_export=False,  # Gateway runs in production mode
     )
 
+    # Load authentication settings
+    auth_settings = AuthSettings()
+    app.state.auth_settings = auth_settings
+
+    if auth_settings.require_auth:
+        logger.info("authentication_enabled", require_auth=True)
+    else:
+        logger.warning("authentication_disabled", require_auth=False)
+
     yield
 
     # Cleanup
@@ -61,6 +74,21 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Authentication middleware (if enabled)
+# Load settings to check if auth is required
+auth_settings = AuthSettings()
+if auth_settings.require_auth:
+    jwt_handler = JWTHandler(secret_key=auth_settings.jwt_secret_key)
+    api_key_handler = APIKeyHandler()
+
+    app.add_middleware(
+        AuthenticationMiddleware,
+        jwt_handler=jwt_handler,
+        api_key_handler=api_key_handler,
+        exempt_paths=auth_settings.require_auth_exceptions,
+    )
+    logger.info("authentication_middleware_added")
 
 # CORS middleware
 app.add_middleware(
@@ -221,6 +249,13 @@ async def proxy_request(
     headers = dict(request.headers)
     headers["X-Correlation-ID"] = correlation_id
     headers.pop("host", None)  # Remove host header
+
+    # Forward user identity if authenticated
+    if hasattr(request.state, "user"):
+        user = request.state.user
+        headers["X-User-ID"] = user.user_id
+        if user.org_id:
+            headers["X-Org-ID"] = user.org_id
 
     try:
         # Read request body
