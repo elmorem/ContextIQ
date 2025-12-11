@@ -119,3 +119,38 @@ class RevisionListResponse(BaseModel):
     model_config = {
         "json_schema_extra": {"example": {"revisions": [], "total": 0, "limit": 10, "offset": 0}}
     }
+
+
+class MemorySearchResult(BaseModel):
+    """Individual search result with memory and similarity score."""
+
+    memory: MemoryResponse = Field(..., description="Memory data")
+    similarity_score: float = Field(..., description="Similarity score (0-1, higher is better)")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "memory": {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "scope": {"user_id": "user_123"},
+                    "fact": "User prefers dark mode for coding",
+                    "topic": "preferences",
+                    "confidence": 0.9,
+                    "importance": 0.7,
+                },
+                "similarity_score": 0.92,
+            }
+        }
+    }
+
+
+class SearchMemoriesResponse(BaseModel):
+    """Response model for memory search results."""
+
+    results: list[MemorySearchResult] = Field(
+        ..., description="Search results with similarity scores"
+    )
+    total: int = Field(..., description="Total number of results returned")
+    limit: int = Field(..., description="Limit applied")
+
+    model_config = {"json_schema_extra": {"example": {"results": [], "total": 0, "limit": 10}}}

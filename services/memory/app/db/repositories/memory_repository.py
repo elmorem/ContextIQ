@@ -5,6 +5,7 @@ Provides CRUD operations and queries for Memory model.
 """
 
 from datetime import UTC, datetime
+from typing import cast as type_cast
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -339,3 +340,56 @@ class MemoryRepository(BaseRepository[Memory]):
             await self.db.flush()
 
         return count
+
+    async def search_by_similarity(
+        self,
+        query_embedding: list[float],
+        scope: dict | None = None,
+        topic: str | None = None,
+        limit: int = 10,
+        min_confidence: float | None = None,
+        include_deleted: bool = False,
+    ) -> list[tuple[Memory, float]]:
+        """
+        Search memories by vector similarity.
+
+        Args:
+            query_embedding: Query vector embedding
+            scope: Optional scope filter
+            topic: Optional topic filter
+            limit: Maximum number of results
+            min_confidence: Optional minimum confidence threshold
+            include_deleted: Whether to include soft-deleted memories
+
+        Returns:
+            List of (Memory, similarity_score) tuples, ordered by similarity (highest first)
+        """
+        # Use pgvector's cosine distance operator (<=>)
+        # Note: pgvector's <=> returns distance (0 = identical, 2 = opposite)
+        # We convert to similarity score: 1 - (distance / 2) gives 0-1 range
+        distance = Memory.embedding.cosine_distance(query_embedding)
+        similarity = 1 - (distance / 2)
+
+        stmt = (
+            select(Memory, similarity.label("similarity"))
+            .where(Memory.embedding.isnot(None))
+            .order_by(distance)
+            .limit(limit)
+        )
+
+        if scope:
+            stmt = stmt.where(Memory.scope == scope)
+
+        if topic:
+            stmt = stmt.where(Memory.topic == topic)
+
+        if min_confidence is not None:
+            stmt = stmt.where(Memory.confidence >= min_confidence)
+
+        if not include_deleted:
+            stmt = stmt.where(Memory.deleted_at.is_(None))
+
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        return [(row[0], float(row[1])) for row in rows]

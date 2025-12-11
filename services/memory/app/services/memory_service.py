@@ -334,3 +334,33 @@ class MemoryService:
             topic=topic,
             include_deleted=include_deleted,
         )
+
+    async def search_memories(
+        self,
+        query_embedding: list[float],
+        scope: dict | None = None,
+        topic: str | None = None,
+        limit: int = 10,
+        min_confidence: float | None = None,
+    ) -> list[tuple[Memory, float]]:
+        """
+        Search memories by vector similarity.
+
+        Args:
+            query_embedding: Query vector embedding
+            scope: Optional scope filter
+            topic: Optional topic filter
+            limit: Maximum number of results (default 10)
+            min_confidence: Optional minimum confidence threshold
+
+        Returns:
+            List of (Memory, similarity_score) tuples, ordered by similarity (highest first)
+        """
+        return await self.memory_repo.search_by_similarity(
+            query_embedding=query_embedding,
+            scope=scope,
+            topic=topic,
+            limit=limit,
+            min_confidence=min_confidence,
+            include_deleted=False,
+        )
