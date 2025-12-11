@@ -11,12 +11,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from services.memory.app.api.schemas.requests import (
     CreateMemoryRequest,
+    SearchMemoriesRequest,
     UpdateMemoryRequest,
 )
 from services.memory.app.api.schemas.responses import (
     DeleteResponse,
     MemoryListResponse,
     MemoryResponse,
+    MemorySearchResult,
+    SearchMemoriesResponse,
 )
 from services.memory.app.core.dependencies import get_memory_service
 from services.memory.app.services.memory_service import MemoryService
@@ -119,6 +122,41 @@ async def list_memories(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.post(
+    "/memories/search",
+    response_model=SearchMemoriesResponse,
+    summary="Search memories by semantic similarity",
+)
+async def search_memories(
+    request: SearchMemoriesRequest,
+    service: Annotated[MemoryService, Depends(get_memory_service)],
+) -> SearchMemoriesResponse:
+    """Search memories using vector similarity with optional scope and topic filtering."""
+    # Perform similarity search
+    results = await service.search_memories(
+        query_embedding=request.query_embedding,
+        scope=request.scope,
+        topic=request.topic,
+        limit=request.limit,
+        min_confidence=request.min_confidence,
+    )
+
+    # Convert to response format
+    search_results = [
+        MemorySearchResult(
+            memory=MemoryResponse.model_validate(memory),
+            similarity_score=similarity_score,
+        )
+        for memory, similarity_score in results
+    ]
+
+    return SearchMemoriesResponse(
+        results=search_results,
+        total=len(search_results),
+        limit=request.limit,
     )
 
 

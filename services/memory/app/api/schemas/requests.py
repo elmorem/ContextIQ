@@ -69,3 +69,29 @@ class ListMemoriesQuery(BaseModel):
     model_config = {
         "json_schema_extra": {"example": {"limit": 50, "offset": 0, "topic": "preferences"}}
     }
+
+
+class SearchMemoriesRequest(BaseModel):
+    """Request model for searching memories by semantic similarity."""
+
+    query_embedding: list[float] = Field(
+        ..., description="Query vector embedding for similarity search"
+    )
+    scope: dict | None = Field(None, description="Optional scope filter")
+    topic: str | None = Field(None, description="Optional topic filter")
+    limit: int = Field(10, description="Maximum number of results", ge=1, le=100)
+    min_confidence: float | None = Field(
+        None, description="Optional minimum confidence threshold", ge=0.0, le=1.0
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "query_embedding": [0.1, 0.2, 0.3],
+                "scope": {"user_id": "user_123"},
+                "topic": "preferences",
+                "limit": 10,
+                "min_confidence": 0.5,
+            }
+        }
+    }
