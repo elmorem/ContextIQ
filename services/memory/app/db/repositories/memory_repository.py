@@ -5,7 +5,6 @@ Provides CRUD operations and queries for Memory model.
 """
 
 from datetime import UTC, datetime
-from typing import cast as type_cast
 from uuid import UUID
 
 from sqlalchemy import func, select

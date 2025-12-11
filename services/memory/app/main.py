@@ -7,13 +7,16 @@ Provides REST API for episodic memory storage with embeddings and revision track
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.memory.app.api.health import router as health_router
 from services.memory.app.api.v1.memories import router as memories_router
 from services.memory.app.api.v1.revisions import router as revisions_router
 from services.memory.app.core.config import get_settings
+from shared.observability.metrics import get_metrics
+from shared.observability.middleware import MetricsMiddleware
+from shared.observability.tracing import instrument_fastapi, setup_tracing
 
 
 @asynccontextmanager
@@ -26,6 +29,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     settings = get_settings()
     app.state.settings = settings
+
+    # Setup distributed tracing
+    setup_tracing(
+        service_name=settings.service_name,
+        service_version=settings.service_version,
+        console_export=settings.debug,
+    )
 
     yield
 
@@ -59,10 +69,22 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Metrics middleware
+    app.add_middleware(MetricsMiddleware, service_name=settings.service_name)
+
+    # Instrument with OpenTelemetry
+    instrument_fastapi(app)
+
     # Register routers
     app.include_router(health_router, tags=["health"])
     app.include_router(memories_router, tags=["memories"])
     app.include_router(revisions_router, tags=["revisions"])
+
+    # Metrics endpoint
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        """Prometheus metrics endpoint."""
+        return Response(content=get_metrics(), media_type="text/plain")
 
     return app
 

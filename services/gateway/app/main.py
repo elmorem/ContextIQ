@@ -18,6 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from shared.config.logging import get_logger
+from shared.observability.metrics import get_metrics
+from shared.observability.middleware import MetricsMiddleware
+from shared.observability.tracing import instrument_fastapi, setup_tracing
 
 logger = get_logger(__name__)
 
@@ -36,6 +39,13 @@ async def lifespan(app: FastAPI) -> Any:
     app.state.http_client = httpx.AsyncClient(
         timeout=httpx.Timeout(30.0, connect=5.0),
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+    )
+
+    # Setup distributed tracing
+    setup_tracing(
+        service_name="api-gateway",
+        service_version="1.0.0",
+        console_export=False,  # Gateway runs in production mode
     )
 
     yield
@@ -60,6 +70,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Metrics middleware
+app.add_middleware(MetricsMiddleware, service_name="api-gateway")
+
+# Instrument with OpenTelemetry
+instrument_fastapi(app)
 
 
 @app.middleware("http")
@@ -283,6 +299,12 @@ async def proxy_memories(request: Request, path: str) -> Response:
     return await proxy_request(request, MEMORY_SERVICE_URL, f"/api/v1/memories/{path}")
 
 
+@app.get("/metrics")
+async def metrics() -> Response:
+    """Prometheus metrics endpoint."""
+    return Response(content=get_metrics(), media_type="text/plain")
+
+
 @app.get("/")
 async def root() -> dict[str, Any]:
     """Root endpoint with service information."""
@@ -292,6 +314,7 @@ async def root() -> dict[str, Any]:
         "endpoints": {
             "health": "/health",
             "services_health": "/health/services",
+            "metrics": "/metrics",
             "sessions": "/api/v1/sessions",
             "memories": "/api/v1/memories",
         },
