@@ -78,6 +78,27 @@ services:
     networks:
       - contextiq-network
 
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    container_name: contextiq-gateway
+    environment:
+      - LOG_LEVEL=DEBUG
+      - ENVIRONMENT=development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/gateway:/app/services/gateway
+      - ./shared:/app/shared
+    depends_on:
+      - sessions-service
+      - memory-service
+    networks:
+      - contextiq-network
+    restart: unless-stopped
+
   # Sessions Service
   sessions-service:
     build:
