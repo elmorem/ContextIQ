@@ -22,6 +22,11 @@ Welcome to the ContextIQ documentation! This guide will help you understand, dep
 - **[System Architecture](architecture/system_architecture.md)** - Detailed architecture documentation
 - **[Data Models](architecture/data_models.md)** - Database schemas and models
 
+### Technical Deep Dives
+
+- **[Embeddings Guide](EMBEDDINGS.md)** - Text embeddings with OpenAI (models, configuration, optimization)
+- **[Vector Search Guide](VECTOR_SEARCH.md)** - Qdrant vector database and similarity search
+
 ### Research & Background
 
 - **[Agent Engine Memory Bank Research](agent_engine_memory_bank_research.md)** - Research notes on Google's approach
@@ -53,11 +58,19 @@ Welcome to the ContextIQ documentation! This guide will help you understand, dep
 3. See [Memory API examples](API_USAGE.md#memory-api)
 
 **...understand the system design**
+
 1. Read [Architecture Overview](ARCHITECTURE.md)
 2. Review [System Architecture](architecture/system_architecture.md) details
 3. Study [Data Models](architecture/data_models.md)
 
+**...understand embeddings and vector search**
+
+1. Read [Embeddings Guide](EMBEDDINGS.md) for text embedding details
+2. Read [Vector Search Guide](VECTOR_SEARCH.md) for similarity search
+3. Review [API Usage Guide](API_USAGE.md) for memory search examples
+
 **...manage database changes**
+
 1. Read [Database Migrations Guide](DATABASE_MIGRATIONS.md)
 2. Learn migration commands and patterns
 3. Understand production migration strategies
