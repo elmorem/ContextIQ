@@ -24,6 +24,9 @@ Welcome to the ContextIQ documentation! This guide will help you understand, dep
 
 ### Technical Deep Dives
 
+- **[Processing Layer Guide](PROCESSING_LAYER.md)** - Core processing engines (extraction, consolidation, embedding, revision tracking)
+- **[Messaging System Guide](MESSAGING.md)** - RabbitMQ messaging system with queues, publishers, and consumers
+- **[Memory Lifecycle Guide](MEMORY_LIFECYCLE.md)** - Complete journey from sessions to memories (extraction and consolidation)
 - **[Embeddings Guide](EMBEDDINGS.md)** - Text embeddings with OpenAI (models, configuration, optimization)
 - **[Vector Search Guide](VECTOR_SEARCH.md)** - Qdrant vector database and similarity search
 
@@ -76,9 +79,30 @@ Welcome to the ContextIQ documentation! This guide will help you understand, dep
 3. Understand production migration strategies
 
 **...configure authentication**
+
 1. Read [Authentication Guide](AUTHENTICATION.md)
 2. Generate JWT secrets and API keys
 3. Configure middleware in your services
+
+**...understand how messaging works**
+
+1. Read [Messaging System Guide](MESSAGING.md) for RabbitMQ details
+2. Learn about queue patterns and message flows
+3. Review publisher and consumer examples
+
+**...understand how memories are created**
+
+1. Read [Memory Lifecycle Guide](MEMORY_LIFECYCLE.md) for end-to-end flow
+2. Learn about extraction with LLM (Anthropic Claude)
+3. Understand consolidation and deduplication
+4. Review embedding generation and vector storage
+
+**...understand the processing layer**
+
+1. Read [Processing Layer Guide](PROCESSING_LAYER.md) for architecture details
+2. Learn about the four core engines and their interactions
+3. Understand how processing fits between services and storage
+4. Review configuration and optimization strategies
 
 ## Documentation Structure
 
